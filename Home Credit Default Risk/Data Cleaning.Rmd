@@ -1,0 +1,225 @@
+---
+title: "Data Cleaning"
+author: "Georgia Christodoulou"
+date: "2024-10-17"
+output: html_document
+---
+
+```{r}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+The purpose of this code is to process data necessary for modeling. This includes:
+
+1.  Cleaning (handling missing values, feature engineering, value standardization, etc.)
+2.  Class balancing
+
+We'll first load a few packages and the data:
+
+```{r}
+library(tidyverse)
+library(dbplyr)
+library(data.table)
+library(caret)
+library(smotefamily)
+
+application_train <- as.data.frame(fread("data/application_train.csv"))
+application_test <- as.data.frame(fread("data/application_test.csv"))
+
+glimpse(application_train)
+```
+
+This function will perform the previously described cleaning.
+
+```{r}
+application_cleaning <- function(data, train = TRUE) {
+  # remove entire columns
+  data <- data[, !grepl("DOCUMENT|AVG|MODE|MEDI", names(data))]
+
+  # impute NA with 0 for specific columns
+  NA_0 <- grep("SOCIAL|BUREAU", names(data), value = TRUE)
+  for (col in NA_0) {
+    data[is.na(data[[col]]), col] <- 0
+  }
+
+  # convert numeric variables with 2 unique values to boolean
+  for (col in names(data)) {
+    if (is.numeric(data[[col]]) && length(unique(data[[col]])) == 2) {
+      data[[col]] <- as.logical(data[[col]])
+    }
+  }
+  
+  # convert character variables with 2 unique values to boolean
+  data$NAME_CONTRACT_TYPE <- data$NAME_CONTRACT_TYPE == "Cash loans"
+  data$CODE_GENDER <- data$CODE_GENDER == "M"
+  data$FLAG_OWN_CAR <- data$FLAG_OWN_CAR == "Y"
+  data$FLAG_OWN_REALTY <- data$FLAG_OWN_REALTY == "Y"
+  
+  # change "TARGET" to "DEFAULT"
+  colnames(data)[colnames(data) == "TARGET"] <- "DEFAULT"
+  
+  # change "CODE_GENDER" to "GENDER_MALE"
+  colnames(data)[colnames(data) == "CODE_GENDER"] <- "GENDER_MALE"
+  
+  # change "NAME_CONTRACT_TYPE" to "CASH_LOAN"
+  colnames(data)[colnames(data) == "NAME_CONTRACT_TYPE"] <- "CASH_LOAN"
+  
+  # impute blanks with NA
+  data[data == ""] <- NA
+
+  # impute NAME_TYPE_SUITE with "Unaccompanied"
+  data$NAME_TYPE_SUITE[is.na(data$NAME_TYPE_SUITE)] <- "Unaccompanied"
+
+  # impute OCCUPATION_TYPE with XNA
+  data$OCCUPATION_TYPE[is.na(data$OCCUPATION_TYPE)] <- "XNA"
+
+  # convert all character columns to factors
+  data[sapply(data, is.character)] <- lapply(data[sapply(data, is.character)], factor)
+
+  # remove rows where FLAG_OWN_CAR = "Y" and OWN_CAR_AGE is NA
+  if(train) {
+    # ONLY DROP ROWS IF THIS IS TRAINING
+    data <- data[!(data$FLAG_OWN_CAR == "Y" & is.na(data$OWN_CAR_AGE)), ]
+  } else {
+    # PRESERVE ROWS & IMPUTE IF THIS IS TESTING
+    if(sum(is.na(data$OWN_CAR_AGE)) > 0) {
+      mean_own_car_age <- median(as.integer(data$OWN_CAR_AGE), na.rm = TRUE)
+      data$OWN_CAR_AGE[data$FLAG_OWN_CAR == "Y" & is.na(data$OWN_CAR_AGE)] <- mean_own_car_age
+    }
+  }
+
+  # add 1 year to all non-NA values of OWN_CAR_AGE
+  data$OWN_CAR_AGE <- ifelse(!is.na(data$OWN_CAR_AGE), data$OWN_CAR_AGE + 1, data$OWN_CAR_AGE)
+
+  # replace remaining NAs in OWN_CAR_AGE with 0
+  data$OWN_CAR_AGE[is.na(data$OWN_CAR_AGE)] <- 0
+
+  # replace NAs in EXT columns with the mean or median of the column
+  # take mean of source 1 and median of source 2 and 3
+  ext1_mean <- mean(data$EXT_SOURCE_1, na.rm = TRUE)
+  ext2_med <- median(data$EXT_SOURCE_2, na.rm = TRUE)
+  ext3_med <- median(data$EXT_SOURCE_3, na.rm = TRUE)
+  
+  # add columns to indicate imputed or not
+  data$IMPUTED_EXT1 <- is.na(data$EXT_SOURCE_1)
+  data$IMPUTED_EXT2 <- is.na(data$EXT_SOURCE_2)
+  data$IMPUTED_EXT3 <- is.na(data$EXT_SOURCE_3)
+  
+  # replace NAs
+  data$EXT_SOURCE_1[is.na(data$EXT_SOURCE_1)] <- ext1_mean
+  data$EXT_SOURCE_2[is.na(data$EXT_SOURCE_2)] <- ext2_med
+  data$EXT_SOURCE_3[is.na(data$EXT_SOURCE_3)] <- ext3_med
+
+  # remove rows with any remaining NA values
+  if(train) {
+    # ONLY DROP ROWS IF THIS IS TRAINING
+    data <- na.omit(data)
+  } else {
+    # PRESERVE ROWS IF THIS IS TESTING
+    cols <- sapply(data, function(y) sum(length(which(is.na(y)))))
+    cols_w_na <- names(cols[which(cols != 0)])
+
+    for(col in cols_w_na) {
+      col_type <- typeof(col)
+      if(col_type %in% c('logical', 'character')) {
+        uniq_vals <- table(data[,match(col, names(data))]) |> prop.table()
+        imputed_value <- sample(names(uniq_vals), 1, prob = as.vector(uniq_vals))
+      } else {
+        value <- median(data[,match(col, names(data))], na.rm = TRUE)
+        imputed_value <- ifelse(col_type == 'integer', as.integer(value), value)
+      }
+      
+      data[,match(col, names(data))] <- imputed_value
+    }
+  }
+
+  return(data)
+}
+```
+
+We'll now apply that to each data set, both train and test:
+
+```{r}
+application_train_clean <- application_cleaning(application_train)
+application_test_clean <- application_cleaning(application_test, train = FALSE)
+```
+
+We'll write these files to the "data/" directory for easy reference during modeling.
+
+```{r}
+fwrite(
+  application_train_clean, 
+  file = "data/application_train_clean.csv", 
+  row.names = FALSE
+)
+
+fwrite(
+  application_test_clean, 
+  file = "data/application_test_clean.csv", 
+  row.names = FALSE
+)
+```
+
+The next function will create a data set of balanced classes using the **SMOTE** approach of Synthetic Minority Oversampling Technique.
+
+```{r}
+application_smote <- function(data) {
+  # CHECK FOR SINGLE VALUE COLUMNS
+  unique <- sapply(data, function(x) length(unique(x)))
+  remove_cols <- names(unique[unique == 1])
+
+  # FORMAT DATA
+  data_clean <- 
+      data |>
+      select(-all_of(remove_cols)) |> 
+      select(-SK_ID_CURR) |>
+      mutate(
+          DEFAULT = factor(DEFAULT), 
+          across(where(is.character) & -DEFAULT, ~factor(make.names(.))), 
+          across(where(is.logical), ~factor(ifelse(.,"Y","N")))
+      )
+
+  # CONFIRM IMBALANCE
+  print("---Old Balance---")
+  print(table(data_clean$DEFAULT) |> prop.table())
+
+  # ONE-HOT-ENCODE VARIABLES WITH {CARET}
+  dmy <- dummyVars("~ . -DEFAULT", data_clean)
+  data_dmy <- data.frame(predict(dmy, data_clean))
+
+  # APPLY SMOTE
+  smote_results <- SMOTE(
+      data_dmy, 
+      target = data_clean$DEFAULT
+  )
+
+  # EXTRACT SMOTE DATE
+  data_smote <- smote_results$data |>
+      mutate(DEFAULT = class) |>
+      select(-class)
+
+  # CONFIRM REBALANCE3
+  print("--- New Balance ---")
+  print(table(data_smote$DEFAULT) |> prop.table())
+
+  return(data_smote)
+}
+```
+
+Now, we'll apply this to only the training set:
+
+```{r}
+application_train_smote <- application_smote(application_train_clean)
+```
+
+We'll then write it to the "data/" directory:
+
+```{r}
+fwrite(
+  application_train_smote, 
+  file = "data/application_train_smote.csv", 
+  row.names = FALSE
+)
+```
+
+Now we have both a cleaned and balanced training data set for use in all of our modeling.
