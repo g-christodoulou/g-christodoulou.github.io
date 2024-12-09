@@ -1,0 +1,461 @@
+---
+title: "IS 6812 Exploratory Data Analysis"
+author: "Georgia Christodoulou"
+date: "10/6/2024"
+output:
+  html_document:
+    highlight: espresso
+    number_sections: yes
+    toc: yes
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
+
+# Business Statement and Analytic Problems
+Home Credit provides a safe and trustworthy loan experience for those with insufficient or non-existent credit histories. Since Home Credit uses alternative data to determine if a client can repay their loan, Home Credit wants to ensure that they are not rejecting clients that are capable of repayment and to set these clients up for success. However, current models might not fully use the available data leading to missed opportunities and can potentially lead to excluding deserving individuals from a loan or giving approved individuals payment terms that they fail to follow. In this stage, we will explore the existing and missing data and explore potential predictor variables to better predict if a client will default on their loan or not.
+
+# Questions To Think About
+- How much of the data is missing?
+- Do the variables with a lot of missing data seem like they could be valuable in predicting default?
+- What should we do with the variable that have missing data?
+- How many variables could help in predicting default?
+- Are there any categorical variables that could be helping in predicting default?
+
+# Libraries and Data Import
+```{r}
+library(tidyverse)
+library(dbplyr)
+library(skimr)
+library(janitor)
+library(psych)
+
+homecredit_train <- read.csv("C:/Users/GeorgiaChristodoulou/Desktop/Practice Capstone Fall 2024/application_train.csv", stringsAsFactors = TRUE)
+homecredit_test <- read.csv("C:/Users/GeorgiaChristodoulou/Desktop/Practice Capstone Fall 2024/application_test.csv", stringsAsFactors = TRUE)
+bureau <- read.csv("C:/Users/GeorgiaChristodoulou/Desktop/Practice Capstone Fall 2024/bureau.csv", stringsAsFactors = TRUE)
+
+# factorize target variable
+homecredit_train$TARGET <- factor(homecredit_train$TARGET)
+
+# view summary of training data
+homecredit_train %>% summary()
+
+# view structure of test data
+homecredit_test %>% summary()
+
+# view summary of bureau data
+bureau %>% summary()
+```
+
+# Discussing the Data
+We have a variety of data sources including the application data of the individuals our outcomes, credit bureau data which provides us with previous loan history, data on if an individual previously applied for and received a loan from Home Credit, and others. In these data sources, we have several variables such as, employment type, education type, family size, gender, living situation, relationship status, loan amount, debt amount, how long a loan has been overdue, and much more. However, there is quite a bit of missing data in these data sets, most importantly the credit scores coming from external source 1 in the application data. There are a lot of normalized variables with information around living situations such as entrances, floors, elevators, apartments, and more that have quite a bit of missing data but because these do not seem relevant to if a client will default on their loan, we can remove these variable all together. However when we look at the credit score variables, we want to be careful with how we handle these. Since we are missing 173,378 values from external source 1, we cannot remove all rows with missing data because we would lose half of our data. We will need to decide if we will impute data or remove this column all together, and in this case, I will replace all missing values in all external credit sources with 0. Since this data is missing, we can assume that there is not a credit score from this source for that individual, so we can replace it with a 0. If this does not seem to be the right approach after completing the data exploration, we can take a different approach. 
+
+# Explore Target Variable and Accuracy
+```{r}
+# counts of default and no default observations
+homecredit_train %>% pull(TARGET) %>% table()
+
+# proportions of default and no default observations
+homecredit_train %>% pull(TARGET) %>% table() %>% prop.table() %>% round(2)
+```
+
+The target variable, default or no default, is very unbalanced. The majority class classifier would always predict class 0, no default, leading to an accuracy of 92%.
+
+# Exploring Numeric Variables
+## Correlations
+```{r}
+# visual of correlations for some numeric variables with respect to the target variable
+homecredit_train %>%
+  select(AMT_INCOME_TOTAL,AMT_CREDIT,EXT_SOURCE_1,EXT_SOURCE_2,EXT_SOURCE_3, DAYS_EMPLOYED,TARGET) %>%
+  pairs.panels()
+```
+
+The credit scores from external sources have the strongest correlations (negative) with respect to the target variable, implying that these could be useful predictors at this stage of the EDA. Additionally, the loan amount is correlated with an individuals income which could be valuable in determining loan amount to avoid default. 
+
+## Numeric Variable Exploration - Income
+```{r}
+# income summary statistics
+homecredit_train$AMT_INCOME_TOTAL %>%
+  summary()
+
+# income histogram
+homecredit_train %>%
+  ggplot(aes(x=AMT_INCOME_TOTAL)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Income')
+
+# income boxplot
+homecredit_train %>%
+  ggplot(aes(x=AMT_INCOME_TOTAL)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Income')
+
+# income vs. default scatterplot
+homecredit_train %>%
+  ggplot(aes(x = AMT_INCOME_TOTAL, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +  
+  labs(x = "Income", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot Income and Default")
+```
+
+There are some extreme values that don't just seem like outliers that could be affecting the distribution of income. Additionally, it seems that those who default are more clustered around a much lower income, whereas those who don't default are more spread out. Are these incomes all in the same currency? If they are, are they accurate? If we remove these values, could this variable be a better predictor of default? How much would the mean income change?
+
+## Numeric Variable Exploration - Credit Amount
+```{r}
+# credit amount summary statistics
+homecredit_train$AMT_CREDIT %>%
+  summary()
+
+# credit amount histogram
+homecredit_train %>%
+  ggplot(aes(x=AMT_CREDIT)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Credit Amount')
+
+# credit amount boxplot
+homecredit_train %>%
+  ggplot(aes(x=AMT_CREDIT)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Credit Amount')
+
+# credit amount vs. default scatterplot
+homecredit_train %>%
+  ggplot(aes(x = AMT_CREDIT, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +  
+  labs(x = "Credit Amount", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot Credit Amount and Default")
+```
+
+The credit amount is more spread a bit more normally distributed, but still skewed. It seems that those who default received a lower loan amount, whereas those who don't default are more spread out across various loan amounts.
+
+## Numeric Variable Exploration - Ext_Source_1
+```{r}
+# credit source 1 summary statistics
+homecredit_train$EXT_SOURCE_1 %>%
+  summary()
+
+# credit source 1 histogram
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_1)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Ext Source 1')
+
+# credit source 1 boxplot
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_1)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Ext Source 1')
+
+# Ext_Source_1 vs. default scatterplot
+homecredit_train %>%
+  ggplot(aes(x = EXT_SOURCE_1, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +  
+  labs(x = "EXT_SOURCE_1", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot EXT_SOURCE_1 and Default")
+```
+
+The distribution of the credit score from the 1st external source is very normal. Because of this, we could impute missing data in this variable with the mean credit score. 
+
+## Numeric Variable Exploration - Ext_Source_2
+```{r}
+# credit source 2 summary statistics
+homecredit_train$EXT_SOURCE_2 %>%
+  summary()
+
+# credit source 2 histogram
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_2)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Ext Source 2')
+
+# credit source 2 boxplot
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_2)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Ext Source 2')
+
+# Ext_Source_2 vs. default scatterplot
+homecredit_train %>%
+  ggplot(aes(x = EXT_SOURCE_2, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +  
+  labs(x = "EXT_SOURCE_2", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot EXT_SOURCE_2 and Default")
+```
+
+The distribution of the credit score from the 2nd external source is left skewed. Because of this, we could impute missing data in this variable with the median credit score from this variable. However, there aren't many missing entries so we could either omit these rows or replace the missing values with zero.
+
+## Numeric Variable Exploration - Ext_Source_3
+```{r}
+# credit source 3 summary statistics
+homecredit_train$EXT_SOURCE_3 %>%
+  summary()
+
+# credit source 3 histogram
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_3)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Ext Source 3')
+
+# credit source 3 boxplot
+homecredit_train %>%
+  ggplot(aes(x=EXT_SOURCE_3)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Ext Source 3')
+
+# Ext_Source_3 vs. default scatterplot
+homecredit_train %>%
+  ggplot(aes(x = EXT_SOURCE_3, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +  
+  labs(x = "EXT_SOURCE_3", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot EXT_SOURCE_3 and Default")
+```
+The distribution of the credit score from the 3rd external source is also left skewed. Because of this, we could impute missing data in this variable with the median credit score from this variable. Since there are more missing entries than the 2nd external source variable, we would need to decide if we want to replace the missing values with a zero, the median, or omit those rows. However, if we omit the rows, we would lose a significant amount of our data.
+
+# Exploring Categorical Variables
+## Income Type and Target Variable
+```{r}
+# proportions of the target variable by income
+homecredit_train %>% select(TARGET,NAME_INCOME_TYPE) %>% table() %>% prop.table() %>% round(2)
+
+# bar plot of the target by income
+homecredit_train %>% 
+  ggplot() +
+  geom_bar(aes(x=TARGET,fill=NAME_INCOME_TYPE),position="dodge") +
+  ggtitle("Barplot of Target by Income Type")
+```
+
+The majority of those who defaulted were working "income type." How do the income type, income amount, and loan amount variables do together in predicting default?
+
+## Education Type and Target Variable
+```{r}
+# proportions of the target variable by education type
+homecredit_train %>% select(TARGET,NAME_EDUCATION_TYPE) %>% table() %>% prop.table() %>% round(2)
+
+# bar plot of the target by education type
+homecredit_train %>% 
+  ggplot() +
+  geom_bar(aes(x=TARGET,fill=NAME_EDUCATION_TYPE),position="dodge") +
+  ggtitle("Barplot of Target by Education Type")
+```
+
+The majority of those who defaulted were had a secondary education. We could isolate the secondary education type and and identify which variables within those individuals can help us predict default. 
+
+## Contract Type and Target Variable
+```{r}
+# proportions of the target variable by contract type
+homecredit_train %>% select(TARGET,NAME_CONTRACT_TYPE) %>% table() %>% prop.table() %>% round(2)
+
+# bar plot of the target by contract type
+homecredit_train %>% 
+  ggplot() +
+  geom_bar(aes(x=TARGET,fill=NAME_CONTRACT_TYPE),position="dodge") +
+  ggtitle("Barplot of Target by Contract Type")
+```
+
+Most loans are cash loans and the revolving loans have very minimal defaults, indicating that this is likely not a useful predictor. 
+
+## Car Ownership and Target Variable
+```{r}
+# proportions of the target variable by gender
+homecredit_train %>% dplyr::select(TARGET,FLAG_OWN_CAR) %>% table() %>% prop.table() %>% round(2)
+
+homecredit_train %>% dplyr::select(OWN_CAR_AGE,FLAG_OWN_CAR) %>% table() %>% prop.table() %>% round(2)
+
+# bar plot of the target by gender
+homecredit_train %>% 
+  ggplot() +
+  geom_bar(aes(x=TARGET,fill=FLAG_OWN_CAR),position="dodge") +
+  ggtitle("Barplot of Target by Car Ownership")
+```
+
+The split between owns a car and does not own a car when compared to the two outcome groups does not have much of a difference. In other words, we don't see a much higher proportion of those owning a car vs not owing a car in the default group compared to the no default group. This also implies that that this is likely not a useful predictor.
+
+# Handling NA Values for Train Data
+```{r}
+# replace missing credit score data with 0
+homecredit_train_clean <- homecredit_train %>%
+  mutate_at(vars(EXT_SOURCE_3, EXT_SOURCE_2,EXT_SOURCE_1), ~replace(., is.na(.), 0))
+
+# remove columns with 20% or more NAs
+homecredit_train_clean <- homecredit_train_clean %>%
+  select_if(~ mean(is.na(.)) < .2)
+
+# remove rows with any NA values
+homecredit_train_clean <- na.omit(homecredit_train_clean)
+
+# summary statistics of cleaned train data
+homecredit_train_clean %>% summary()
+```
+
+# Handling NA Values for Test Data
+```{r}
+# replace missing credit score data with 0
+homecredit_test_clean <- homecredit_test %>%
+  mutate_at(vars(EXT_SOURCE_3, EXT_SOURCE_2,EXT_SOURCE_1), ~replace(., is.na(.), 0))
+
+# remove columns with 20% or more NAs
+homecredit_test_clean <- homecredit_test_clean %>%
+  select_if(~ mean(is.na(.)) < .2)
+
+# remove rows with any NA values
+homecredit_test_clean <- na.omit(homecredit_test_clean)
+
+# summary statistics of cleaned train data
+homecredit_test_clean %>% summary()
+```
+
+
+# Handling NA Values for Bureau Data
+```{r}
+# summary statistics of bureau data
+bureau %>% summary()
+
+# replace NAs with 0
+bureau <- bureau %>%
+  mutate_at(vars(DAYS_CREDIT_ENDDATE, DAYS_ENDDATE_FACT,AMT_CREDIT_MAX_OVERDUE,AMT_CREDIT_SUM, AMT_CREDIT_SUM_DEBT, AMT_CREDIT_SUM_LIMIT,AMT_ANNUITY), ~replace(., is.na(.), 0))
+
+# summary statistics after handling NAs
+bureau %>% summary()
+```
+
+# Join Application and Bureau Data
+```{r}
+# aggregate bureau data by current ID, number of loans, average loan amount, average days overdue, and currency
+bureau_aggregated <- bureau %>%
+  group_by(SK_ID_CURR) %>%
+  summarise(total_loans = n(),
+            avg_loan_amount = mean(AMT_CREDIT_SUM, na.rm = TRUE),
+            avg_days_overdue = mean(CREDIT_DAY_OVERDUE),
+            currency = CREDIT_CURRENCY)
+
+# return one row per ID
+bureau_aggregated <- distinct(bureau_aggregated)
+
+# join train and bureau data
+train_bureau <- left_join(homecredit_train_clean, bureau_aggregated, by = "SK_ID_CURR")
+
+# remove rows with any NA values
+train_bureau <- na.omit(train_bureau)
+
+# view aggregated data summary
+bureau_aggregated %>% summary()
+```
+
+# Explore Target Variable and Accuracy for Joined Data
+```{r}
+# counts of default and no default observations
+train_bureau %>% pull(TARGET) %>% table()
+
+# proportions of default and no default observations
+train_bureau %>% pull(TARGET) %>% table() %>% prop.table() %>% round(2)
+```
+
+We still have the same target variable split as our original dataset, implying that we have not removed too much data where our outcome variable is affected, leading us to not be able to further explore our data or make any predictions. 
+
+# Exploring Numeric Variables on Joined Data
+## Correlations
+```{r}
+# visual of correlations for some numeric variables with respect to the target variable
+train_bureau %>%
+  select(EXT_SOURCE_1,EXT_SOURCE_2,EXT_SOURCE_3, total_loans, avg_loan_amount, avg_days_overdue, TARGET) %>%
+  pairs.panels()
+```
+
+Credit score external sources 2 and 3 seem to remain having a strong correlation with the target variable, whereas external source 1 has been reduced quite a bit after replacing the missing values with zero rather than another option. This could be something to consider - if we want to replace the missing values with the median as previously mentioned or keep zeros. 
+
+## Numeric Variable Exploration - Total Loans
+```{r}
+# total loans summary statistics
+train_bureau$total_loans %>%
+  summary()
+
+# total loans histogram
+train_bureau %>%
+  ggplot(aes(x=total_loans)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Total Number of Loans')
+
+# total loans boxplot
+train_bureau %>%
+  ggplot(aes(x=total_loans)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Total Number of Loans')
+
+# average loan amount vs. default scatterplot
+train_bureau %>%
+  ggplot(aes(x = total_loans, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) +
+  labs(x = "Number of Loans", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot Total Number of Loans and Default")
+```
+
+The spread of the total number of loans an individual has is very similar between the default and no default group, implying that the amount of loans someone has had, likely does not indicate if they are capable of repayment or not. 
+
+## Numeric Variable Exploration - Average Loan Amouunt
+```{r}
+# average loan amount summary statistics
+train_bureau$avg_loan_amount %>%
+  summary()
+
+# average loan amount histogram
+train_bureau %>%
+  ggplot(aes(x=avg_loan_amount)) +
+  geom_histogram(bins=10) +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Histogram of Average Loan Amount')
+
+# average loan amount boxplot
+train_bureau %>%
+  ggplot(aes(x=avg_loan_amount)) +
+  geom_boxplot() +
+  scale_x_continuous(labels = scales::comma) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle('Boxplot of Average Loan Amount')
+
+# average loan amount vs. defualt scatterplot
+train_bureau %>%
+  ggplot(aes(x = avg_loan_amount, y = TARGET, color = TARGET)) +
+  geom_jitter(height = 0.05, width = 0.05) + 
+  labs(x = "AVG Loan Amount", y = "Target") +
+  theme_minimal() +
+  ggtitle("Scatter Plot Average Loan Amount and Default")
+```
+
+The scatterplot using the average loan amount data from the bureau data compared to the training data is very similar, where those who default received a much lower loan amount, whereas those who don't default are much more spread out across various loan amounts. We might consider using loan amount along with other variables to help in predicting default. 
+
+# Results
+Overall, there is a lot of data that will likely not help with predicting loan default. There are a handful of values that seem very large and incorrect, not just an outlier. When we look at the bureau data, we see different currencies which could explain these large values. However, the data does not indicate the currency, just "type 1", "type 2", etc. so we aren't able to do a currency conversion. In this case, we may need to decide if we need to exclude these entries from the data set because it could be affecting potential predictor variables. Some variables I have identified as potential predictors are the external credit score sources having the strongest relationship with the target variable. Other potential predictors include the loan amount, an individuals income, employment type, and education type. We might want to include interaction terms on loan amount and income, or education type and loan amount. Interaction terms will be important in the modeling step of this project in order to determine the best predictors. 
