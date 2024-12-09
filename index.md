@@ -2,10 +2,10 @@
 
 ---
 
-### Category Name 1 
+### Data Science
 
-[Project 1 Title](/sample_page)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+[Home Credit Defualt Risk](/sample_page)
+<img src="C:\Users\GeorgiaChristodoulou\Desktop\Home_Credit_logo.svg.png"/>
 
 ---
 [Project 2 Title](/pdf/sample_presentation.pdf)
