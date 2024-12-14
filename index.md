@@ -16,8 +16,8 @@ This project aims to predict whether a customer will default on their loan using
 - Random Forest Model Training and Evaluation
 
 ## Files
-- [Data Cleaning Notebook](data-cleaning.Rmd)
-- [EDA Notebook](eda.Rmd)
+- [Data Cleaning Notebook](Data Cleaning.Rmd)
+- [EDA Notebook](EDA_Georgia Christodoulou.Rmd)
 - [Model Training](model-training.Rmd)
 
 ## Visuals
