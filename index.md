@@ -5,7 +5,7 @@
 ### Data Science
 
 [Home Credit Defualt Risk](/sample_page)
-<img src="images/dummy_thumbnail.jpg?raw=true"/>
+<img src="images/Home_Credit_logo.svg.png?raw=true"/>
 
 ---
 [Project 2 Title](/pdf/sample_presentation.pdf)
