@@ -4,7 +4,7 @@
 
 ### Data Science
 
-[Home Credit Defualt Risk](/sample_page)
+[Home Credit Defualt Risk](/Home Credit Default Risk)
 <img src="images/Home_Credit_logo.svg.png?raw=true"/>
 
 ---
