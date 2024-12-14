@@ -16,9 +16,10 @@ This project aims to predict whether a customer will default on their loan using
 - Random Forest Model Training and Evaluation
 
 ## Files
-- [Data Cleaning Notebook](Home Credit Default Risk/Data Cleaning.Rmd)
-- [EDA Notebook](EDA_Georgia Christodoulou.Rmd)
-- [Model Training](model-training.Rmd)
+- [Data Cleaning Notebook](Data-Cleaning.Rmd)
+- [EDA Notebook](EDA.Rmd)
+- [Model Training Initial](Random-Forest-Initial.Rmd)
+- [Model Training Final](Random-Forest-Final.Rmd)
 
 ## Visuals
 <img src="../../images/Home_Credit_logo.svg.png" alt="Home Credit Logo" style="width: 300px;"/>
