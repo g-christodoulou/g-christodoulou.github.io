@@ -6,6 +6,22 @@
 
 [Home Credit Defualt Risk](/index.md)
 
+# Home Credit Default Risk
+
+This project aims to predict whether a customer will default on their loan using machine learning techniques.
+
+## Key Features
+- Data Cleaning
+- Exploratory Data Analysis
+- Random Forest Model Training and Evaluation
+
+## Files
+- [Data Cleaning Notebook](data-cleaning.Rmd)
+- [EDA Notebook](eda.Rmd)
+- [Model Training](model-training.Rmd)
+
+## Visuals
+<img src="../../images/Home_Credit_logo.svg.png" alt="Home Credit Logo" style="width: 300px;"/>
 
 <img src="images/Home_Credit_logo.svg.png?raw=true"/>
 
