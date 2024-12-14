@@ -21,9 +21,6 @@ This project aims to predict whether a customer will default on their loan using
 - [Model Training Initial](Random-Forest-Initial.Rmd)
 - [Model Training Final](Random-Forest-Final.Rmd)
 
-## Visuals
-<img src="../../images/Home_Credit_logo.svg.png" alt="Home Credit Logo" style="width: 300px;"/>
-
 <img src="images/Home_Credit_logo.svg.png?raw=true"/>
 
 ---
